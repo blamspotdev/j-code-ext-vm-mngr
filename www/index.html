@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>VM Manager</title>
+<style>
+  :root{
+    --bg:#14161c; --panel:#1b1e26; --panel2:#20242e; --line:#2c313c;
+    --fg:#e6e8ee; --muted:#9aa3b2; --accent:#a78bfa;
+    --ok:#34d399; --bad:#f87171; --warn:#fbbf24;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--fg);
+    font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  body{ padding:14px 12px 40px; }
+  h1{ font-size:18px; margin:0 0 2px; }
+  h2{ font-size:14px; margin:0 0 10px; color:var(--fg); }
+  .sub{ color:var(--muted); font-size:12px; margin:0 0 16px; }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:14px; margin:0 0 14px; }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  @media(max-width:420px){ .grid{ grid-template-columns:1fr; } }
+  label{ display:block; font-size:12px; color:var(--muted); margin:0 0 3px; }
+  input,select{ width:100%; background:var(--panel2); color:var(--fg);
+    border:1px solid var(--line); border-radius:8px; padding:8px 9px; font-size:13px; }
+  input:focus,select:focus{ outline:none; border-color:var(--accent); }
+  .field{ margin:0 0 10px; }
+  button{ background:var(--panel2); color:var(--fg); border:1px solid var(--line);
+    border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:var(--accent); border-color:var(--accent); color:#16121f; font-weight:600; }
+  button.ok{ border-color:var(--ok); color:var(--ok); }
+  button.bad{ border-color:var(--bad); color:var(--bad); }
+  button:disabled{ opacity:.5; cursor:default; }
+  .pill{ display:inline-flex; align-items:center; gap:6px; font-size:12px;
+    padding:4px 10px; border-radius:999px; border:1px solid var(--line); }
+  .pill.ok{ color:var(--ok); border-color:var(--ok); }
+  .pill.bad{ color:var(--bad); border-color:var(--bad); }
+  .pill.run{ color:var(--ok); border-color:var(--ok); }
+  .pill.stop{ color:var(--muted); }
+  .dot{ width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .note{ color:var(--muted); font-size:12px; margin:8px 0 0; }
+  .note.bad{ color:var(--bad); }
+  pre.out{ background:#0e1014; border:1px solid var(--line); border-radius:8px;
+    padding:10px; margin:10px 0 0; font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
+    color:#cdd3df; white-space:pre-wrap; word-break:break-word; max-height:260px;
+    overflow:auto; user-select:text; -webkit-user-select:text; }
+  .vm{ border:1px solid var(--line); border-radius:10px; padding:12px; margin:0 0 10px;
+    background:var(--panel2); }
+  .vm .name{ font-weight:600; font-size:14px; }
+  .vm .meta{ color:var(--muted); font-size:12px; margin:2px 0 10px; }
+  .fwd{ display:flex; gap:6px; align-items:center; margin:0 0 6px; }
+  .fwd input{ width:auto; flex:1; }
+  .fwd .x{ flex:0 0 auto; padding:6px 10px; }
+  .muted{ color:var(--muted); }
+  .empty{ color:var(--muted); font-size:13px; padding:6px 0; }
+  .sep{ height:1px; background:var(--line); margin:12px 0; border:0; }
+</style>
+</head>
+<body>
+
+<h1>VM Manager</h1>
+<p class="sub">Full-system QEMU x86 / x86_64 virtual machines on ARM64. Software emulation (no KVM) — slow but compatible.</p>
+
+<div class="card" id="statusCard">
+  <h2>QEMU runtime</h2>
+  <div id="statusBody"><span class="pill"><span class="dot"></span> Checking…</span></div>
+</div>
+
+<div class="card">
+  <h2>Create a VM</h2>
+  <div class="grid">
+    <div class="field"><label>Name (a–z, 0–9, dash)</label><input id="cName" placeholder="sqlserver" /></div>
+    <div class="field"><label>RAM (MB)</label><input id="cRam" type="number" value="2048" /></div>
+    <div class="field"><label>CPUs</label><input id="cCpus" type="number" value="2" /></div>
+    <div class="field"><label>Disk size (GB)</label><input id="cDisk" type="number" value="20" /></div>
+  </div>
+  <div class="field"><label>Install ISO path (optional, inside the distro)</label>
+    <input id="cIso" placeholder="/root/iso/ubuntu.iso" /></div>
+  <div class="field">
+    <label>Port forwards (guest → host)</label>
+    <div id="fwdList"></div>
+    <button id="addFwd" type="button">+ Add forward</button>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <button class="primary" id="createBtn" type="button">Create VM</button>
+  </div>
+  <pre class="out" id="createOut" style="display:none"></pre>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">Virtual machines</h2>
+    <button id="refreshBtn" type="button">Refresh</button>
+  </div>
+  <hr class="sep" />
+  <div id="vmList"><div class="empty">Loading…</div></div>
+</div>
+
+<script>
+window.JCode = (function () {
+  const pending = {}; let seq = 0;
+  return {
+    exec(command, timeoutMs) {
+      return new Promise((resolve) => {
+        const id = 'r' + (seq++); pending[id] = resolve;
+        try { window.JCodeNative.exec(id, command, timeoutMs || 60000); }
+        catch (e) { delete pending[id]; resolve({ error: 'bridge unavailable: ' + e }); }
+      });
+    },
+    _onExec(id, payload) {
+      const cb = pending[id]; if (!cb) return; delete pending[id];
+      let r; try { r = JSON.parse(payload); } catch (e) { r = { error: payload }; }
+      cb(r);
+    }
+  };
+})();
+
+function out(r){ return (((r && r.stdout)||'')+((r && r.stderr)||'')).replace(/\s+$/,''); }
+function sh(v){ return "'" + String(v).replace(/'/g, "'\\''") + "'"; }
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function ok(r){ return r && !r.error && (r.exitCode === 0 || r.exitCode === undefined); }
+const VMDIR = '/root/vms';
+
+/* ---- QEMU status ---- */
+async function checkQemu(){
+  const body = el('statusBody');
+  const sys = await JCode.exec('command -v qemu-system-x86_64', 8000);
+  const img = await JCode.exec('command -v qemu-img', 8000);
+  const hasSys = !!out(sys), hasImg = !!out(img);
+  if (hasSys && hasImg){
+    const ver = await JCode.exec('qemu-system-x86_64 --version | head -1', 8000);
+    body.innerHTML =
+      '<span class="pill ok"><span class="dot"></span> QEMU installed</span>'+
+      '<div class="note">'+esc(out(ver) || 'qemu-system-x86_64 ready')+'</div>';
+    return true;
+  }
+  body.innerHTML =
+    '<span class="pill bad"><span class="dot"></span> QEMU not installed</span>'+
+    '<div class="note bad">Install "x86 Virtualization (QEMU)" from the SDK Manager first.</div>';
+  return false;
+}
+
+/* ---- port-forward editor ---- */
+function fwdRow(guest, host){
+  const div = document.createElement('div');
+  div.className = 'fwd';
+  div.innerHTML =
+    '<input class="g" type="number" placeholder="guest" value="'+(guest||'')+'" />'+
+    '<span class="muted">→</span>'+
+    '<input class="h" type="number" placeholder="host" value="'+(host||'')+'" />'+
+    '<button class="x bad" type="button">✕</button>';
+  div.querySelector('.x').onclick = () => div.remove();
+  return div;
+}
+function readFwds(){
+  const fwds = [];
+  el('fwdList').querySelectorAll('.fwd').forEach(d => {
+    const g = parseInt(d.querySelector('.g').value, 10);
+    const h = parseInt(d.querySelector('.h').value, 10);
+    if (g > 0 && h > 0) fwds.push({ guest: g, host: h });
+  });
+  return fwds;
+}
+
+/* ---- create ---- */
+async function createVm(){
+  const o = el('createOut'); o.style.display = 'block';
+  const name = (el('cName').value || '').trim();
+  if (!/^[a-zA-Z0-9-]+$/.test(name)){ o.textContent = 'Invalid name. Use letters, digits and dashes only.'; return; }
+  const ram  = parseInt(el('cRam').value, 10)  || 2048;
+  const cpus = parseInt(el('cCpus').value, 10) || 2;
+  const disk = parseInt(el('cDisk').value, 10) || 20;
+  const iso  = (el('cIso').value || '').trim();
+  const fwds = readFwds();
+  const dir  = VMDIR + '/' + name;
+
+  el('createBtn').disabled = true;
+  o.textContent = 'Creating ' + name + '…';
+
+  const exists = await JCode.exec('test -e '+sh(dir)+' && echo yes || echo no', 8000);
+  if (out(exists) === 'yes'){ o.textContent = 'A VM named "'+name+'" already exists.'; el('createBtn').disabled = false; return; }
+
+  let log = '';
+  const mk = await JCode.exec('mkdir -p '+sh(dir), 10000);
+  log += '$ mkdir -p '+dir+'\n'+(out(mk)||'')+'\n';
+
+  o.textContent = log + '\n$ qemu-img create -f qcow2 disk.qcow2 '+disk+'G\n(this can take a moment…)';
+  const create = await JCode.exec('qemu-img create -f qcow2 '+sh(dir+'/disk.qcow2')+' '+disk+'G', 300000);
+  log += '$ qemu-img create -f qcow2 disk.qcow2 '+disk+'G\n'+(out(create)||'')+'\n';
+  if (!ok(create)){ o.textContent = log + '\nDisk creation failed.'; el('createBtn').disabled = false; return; }
+
+  const cfg = { name, ram, cpus, disk, iso, forwards: fwds };
+  const json = JSON.stringify(cfg, null, 2);
+  const write = await JCode.exec('cat > '+sh(dir+'/vm.json')+" <<'JCODE_EOF'\n"+json+'\nJCODE_EOF', 10000);
+  log += '$ write vm.json\n'+(out(write)||'')+'\n';
+
+  o.textContent = log + '\nDone. VM "'+name+'" created.';
+  el('createBtn').disabled = false;
+  el('cName').value = '';
+  loadVms();
+}
+
+/* ---- list ---- */
+async function loadVms(){
+  const list = el('vmList');
+  const ls = await JCode.exec('ls -1 '+VMDIR+'/*/vm.json 2>/dev/null', 10000);
+  const paths = out(ls).split('\n').map(s => s.trim()).filter(Boolean);
+  if (!paths.length){ list.innerHTML = '<div class="empty">No VMs yet. Create one above.</div>'; return; }
+
+  list.innerHTML = '';
+  for (const p of paths){
+    const dir = p.replace(/\/vm\.json$/, '');
+    const name = dir.split('/').pop();
+    const catr = await JCode.exec('cat '+sh(p), 8000);
+    let cfg = {}; try { cfg = JSON.parse(out(catr)); } catch (e) { cfg = { name }; }
+    const running = await isRunning(name);
+    list.appendChild(renderVm(name, dir, cfg, running));
+  }
+}
+
+async function isRunning(name){
+  const dir = VMDIR + '/' + name;
+  const r = await JCode.exec(
+    'P=$(cat '+sh(dir+'/qemu.pid')+' 2>/dev/null); '+
+    'if [ -n "$P" ] && kill -0 "$P" 2>/dev/null; then echo run; else echo stop; fi', 8000);
+  return out(r) === 'run';
+}
+
+function fwdText(cfg){
+  const f = (cfg.forwards || []);
+  if (!f.length) return 'no forwards';
+  return f.map(x => x.guest + '→' + x.host).join(', ');
+}
+
+function renderVm(name, dir, cfg, running){
+  const div = document.createElement('div');
+  div.className = 'vm';
+  const ram = cfg.ram || '?', cpus = cfg.cpus || '?', disk = cfg.disk || '?';
+  div.innerHTML =
+    '<div class="row" style="justify-content:space-between">'+
+      '<span class="name">'+esc(name)+'</span>'+
+      (running
+        ? '<span class="pill run"><span class="dot"></span> running</span>'
+        : '<span class="pill stop"><span class="dot"></span> stopped</span>')+
+    '</div>'+
+    '<div class="meta">'+ram+' MB · '+cpus+' CPU · '+disk+' GB disk · '+esc(fwdText(cfg))+
+      (cfg.iso ? ' · ISO: '+esc(cfg.iso) : '')+'</div>'+
+    '<div class="row">'+
+      '<button class="start ok"'+(running?' disabled':'')+'>Start</button>'+
+      '<button class="stop">Stop</button>'+
+      '<button class="force bad">Force stop</button>'+
+      '<button class="console">View console</button>'+
+      '<button class="del bad">Delete</button>'+
+    '</div>'+
+    '<pre class="out vout" style="display:none"></pre>';
+  const vout = div.querySelector('.vout');
+  const show = t => { vout.style.display='block'; vout.textContent = t; };
+  div.querySelector('.start').onclick   = () => startVm(name, dir, cfg, show);
+  div.querySelector('.stop').onclick    = () => stopVm(name, dir, false, show);
+  div.querySelector('.force').onclick   = () => stopVm(name, dir, true, show);
+  div.querySelector('.console').onclick = () => viewConsole(dir, show);
+  div.querySelector('.del').onclick     = () => deleteVm(name, dir);
+  return div;
+}
+
+/* ---- start ---- */
+async function startVm(name, dir, cfg, show){
+  show('Starting '+name+'…');
+  const ram = cfg.ram || 2048, cpus = cfg.cpus || 2;
+  const fwds = (cfg.forwards || []).map(f => ',hostfwd=tcp::'+f.host+'-:'+f.guest).join('');
+  let cmd = 'setsid qemu-system-x86_64 -accel tcg'+
+    ' -m '+ram+' -smp '+cpus+
+    ' -drive file='+sh(dir+'/disk.qcow2')+',if=virtio';
+  if (cfg.iso) cmd += ' -cdrom '+sh(cfg.iso)+' -boot d';
+  cmd += ' -netdev user,id=n0'+fwds+
+    ' -device virtio-net,netdev=n0'+
+    ' -nographic -serial file:'+sh(dir+'/console.log')+
+    ' -pidfile '+sh(dir+'/qemu.pid')+
+    ' </dev/null >'+sh(dir+'/qemu-stdout.log')+' 2>&1 &';
+  const r = await JCode.exec(cmd, 15000);
+  // give qemu a moment to write the pidfile, then confirm.
+  await new Promise(res => setTimeout(res, 1200));
+  const running = await isRunning(name);
+  show((out(r) ? out(r)+'\n' : '') + (running
+    ? 'Started. Serial console → /root/vms/'+name+'/console.log'
+    : 'Launch issued but no running process detected — check the console / qemu-stdout.log.'));
+  loadVms();
+}
+
+/* ---- stop ---- */
+async function stopVm(name, dir, force, show){
+  show((force?'Force-stopping ':'Stopping ')+name+'…');
+  const sig = force ? '-9 ' : '';
+  const r = await JCode.exec(
+    'P=$(cat '+sh(dir+'/qemu.pid')+' 2>/dev/null); '+
+    'if [ -n "$P" ]; then kill '+sig+'"$P" 2>/dev/null; fi; '+
+    'rm -f '+sh(dir+'/qemu.pid')+'; echo stopped', 15000);
+  show(out(r) || 'stopped');
+  setTimeout(loadVms, 600);
+}
+
+/* ---- console ---- */
+async function viewConsole(dir, show){
+  show('Reading console…');
+  const r = await JCode.exec('tail -n 200 '+sh(dir+'/console.log')+' 2>/dev/null', 10000);
+  const t = out(r);
+  show(t || '(console.log is empty — VM may not have booted yet)');
+}
+
+/* ---- delete ---- */
+async function deleteVm(name, dir){
+  if (!confirm('Delete VM "'+name+'" and its disk? This cannot be undone.')) return;
+  await JCode.exec(
+    'P=$(cat '+sh(dir+'/qemu.pid')+' 2>/dev/null); '+
+    'if [ -n "$P" ]; then kill -9 "$P" 2>/dev/null; fi; '+
+    'rm -rf '+sh(dir), 20000);
+  loadVms();
+}
+
+/* ---- wire up ---- */
+el('addFwd').onclick = () => el('fwdList').appendChild(fwdRow('', ''));
+el('createBtn').onclick = createVm;
+el('refreshBtn').onclick = loadVms;
+
+el('fwdList').appendChild(fwdRow(1433, 1433)); // default: SQL Server
+checkQemu();
+loadVms();
+</script>
+</body>
+</html>

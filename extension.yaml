@@ -1,0 +1,17 @@
+id: jcode.ext.vmmanager
+name: VM Manager
+version: 0.1.0
+type: app
+publisher: jcode
+description: Create and run x86/x86_64 QEMU virtual machines on this ARM device.
+longDescription: >
+  Manage full-system QEMU x86 / x86_64 virtual machines to run software that has no
+  ARM build — for example Microsoft SQL Server, whose engine segfaults under user-mode
+  emulation but runs correctly inside a real emulated x86 guest. VMs run under software
+  emulation only (no KVM on Android), so they are slow but fully compatible. Each VM is
+  a self-contained qcow2 disk plus a JSON config, with configurable guest-to-host port
+  forwards so other tools (such as the SQL Client extension) can reach services inside
+  the VM. Requires the "x86 Virtualization (QEMU)" SDK entry to be installed first.
+supportedArches: [arm64]
+requires:
+  sdks: [qemu-system-x86]
