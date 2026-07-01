@@ -31,4 +31,4 @@ the x86 workload; the SQL Client connects over a normal TCP socket.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).
