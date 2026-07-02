@@ -1,6 +1,6 @@
 id: jcode.ext.vmmanager
 name: VM Manager
-version: 0.1.0
+version: 0.1.1
 type: app
 publisher: jcode
 description: Create and run x86/x86_64 QEMU virtual machines on this ARM device.

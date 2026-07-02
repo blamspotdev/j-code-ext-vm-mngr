@@ -2,7 +2,7 @@
 schema: 1
 uniqueName: jcode.ext.vmmanager
 name: VM Manager
-version: 0.1.0
+version: 0.1.1
 type: app
 publisher: jcode
 shortDescription: Create and run x86/x86_64 virtual machines with QEMU — for software with no ARM build.
@@ -20,7 +20,7 @@ suggests:
   lsps: []
   extensions: []
 images:
-  icon: null
+  icon: media/icon.png
   samples: []
   walkthrough: []
 entry:
