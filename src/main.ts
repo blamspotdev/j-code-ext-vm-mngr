@@ -470,11 +470,7 @@ async function startVm(name: string) {
   // for the lock to release. Inside the proot /proc is the bind-mounted host /proc, so QEMU is visible;
   // it runs as the app's real uid so the kill is permitted.
   const disk = dir + '/disk.qcow2';
-  await exec(
-    'n=0; while [ $n -lt 10 ]; do f=0; for p in /proc/[0-9]*/cmdline; do [ -r "$p" ] || continue; ' +
-    'tr "\\000" " " < "$p" 2>/dev/null | grep -qF ' + sh(disk) + ' || continue; ' +
-    'pid=${p%/cmdline}; kill -9 "${pid##*/}" 2>/dev/null; f=1; done; ' +
-    '[ $f -eq 0 ] && break; sleep 0.5; n=$((n+1)); done', 20000);
+  await reapVmProcess(disk, true);
   await exec(': > ' + sh(dir + '/serial.out') + '; rm -f ' + sh(dir + '/serial.pts'), 8000);
   const s = await api('service.start', { id: 'vm:' + name, command: q });
   if (!s.ok) { toast('Start failed: ' + (s.error || 'service error')); return; }
@@ -497,13 +493,30 @@ async function startVm(name: string) {
   await loadVms();
 }
 
-async function stopVm(name: string, _force: boolean) {
+// Reap the QEMU process still holding this VM's disk. `service.stop` alone doesn't reliably bring QEMU
+// down (it's orphaned from the service shell — the start path already has to scan for leftovers), which
+// is why a soft Stop appeared to do nothing. Scan the (host-visible, bind-mounted) /proc for a process
+// whose cmdline references disk.qcow2 and signal it; running as the app's real uid, the kill is allowed.
+// Soft stop sends SIGTERM (QEMU exits cleanly, flushing the qcow2), escalating to SIGKILL only if it
+// hasn't exited within a few seconds; force sends SIGKILL straight away.
+async function reapVmProcess(disk: string, force: boolean) {
+  const sweep = (sig: string) =>
+    'for p in /proc/[0-9]*/cmdline; do [ -r "$p" ] || continue; ' +
+    'tr "\\000" " " < "$p" 2>/dev/null | grep -qF ' + sh(disk) + ' || continue; ' +
+    'pid=${p%/cmdline}; kill -' + sig + ' "${pid##*/}" 2>/dev/null; f=1; done';
+  await exec('n=0; while [ $n -lt 12 ]; do f=0; ' + sweep(force ? 'KILL' : 'TERM') + '; ' +
+    '[ $f -eq 0 ] && break; sleep 0.5; n=$((n+1)); done', 20000);
+  if (!force) await exec('f=0; ' + sweep('KILL'), 12000); // SIGTERM didn't take — force it so Stop always stops.
+}
+
+async function stopVm(name: string, force: boolean) {
   const dir = vmDir(name);
-  toast('Stopping ' + name + '…');
+  toast((force ? 'Force-stopping ' : 'Stopping ') + name + '…');
   await api('service.stop', { id: 'vmread:' + name });
   await api('service.stop', { id: 'vm:' + name });
+  await reapVmProcess(dir + '/disk.qcow2', force);
   await exec('rm -f ' + sh(dir + '/qemu.pid') + ' ' + sh(dir + '/serial.pts'), 8000);
-  await sleep(400);
+  await sleep(300);
   await loadVms();
 }
 
