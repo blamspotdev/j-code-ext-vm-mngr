@@ -1,9 +1,9 @@
 id: jcode.ext.vmmanager
 name: VM Manager
-version: 0.1.1
-type: app
+version: 0.3.1
+type: vm
 publisher: jcode
-description: Create and run x86/x86_64 QEMU virtual machines on this ARM device.
+description: Create and run x86/x86_64 QEMU virtual machines on this ARM device, incl. a one-click SQL Server VM.
 longDescription: >
   Manage full-system QEMU x86 / x86_64 virtual machines to run software that has no
   ARM build — for example Microsoft SQL Server, whose engine segfaults under user-mode
@@ -11,7 +11,28 @@ longDescription: >
   emulation only (no KVM on Android), so they are slow but fully compatible. Each VM is
   a self-contained qcow2 disk plus a JSON config, with configurable guest-to-host port
   forwards so other tools (such as the SQL Client extension) can reach services inside
-  the VM. Requires the "x86 Virtualization (QEMU)" SDK entry to be installed first.
+  the VM. Includes a one-click "Set up SQL Server" helper that provisions an Ubuntu 22.04
+  cloud-image VM and auto-installs Microsoft SQL Server 2022 (Developer edition) on first
+  boot via cloud-init — no manual OS install — then exposes it at localhost:1433 for the
+  SQL Client. Requires the "x86 Virtualization (QEMU)" SDK entry to be installed first.
 supportedArches: [arm64]
+api:
+  minApiVersion: 1
+  capabilities: [exec, workbench]
 requires:
   sdks: [qemu-system-x86]
+
+# --- header fields merged from extension.jehm ---
+shortDescription: Create and run x86/x86_64 QEMU VMs — incl. a one-click SQL Server VM — for software with no ARM build.
+minJCodeVersion: 1.0.0
+targetJCodeVersion: 1.0.0
+category: Virtualization
+subcategory: QEMU
+images:
+  icon: media/icon.png
+  samples: []
+  walkthrough: []
+entry:
+  manifest: extension.yaml
+  ui: www/index.html
+  libs: []
