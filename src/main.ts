@@ -720,10 +720,9 @@ async function sqlStatus(name: string): Promise<{ state: string; label: string; 
 
 async function watchSql(name: string, el: HTMLElement) {
   if (!document.body.contains(el)) return;
-  if (document.hidden) { // don't spend two execs per tick while not visible; retry later
-    setTimeout(() => void watchSql(name, el), 10000);
-    return;
-  }
+  // Do NOT gate on document.hidden: a modal drawer's WebView (landscape) reports hidden even while it is
+  // on screen, which used to defer this poller forever and freeze the card on "Checking…". The
+  // element-in-DOM check above already stops the loop once the card is removed (drawer closed).
   // Never let one slow/stuck exec freeze the poller: race the check against a timeout and ALWAYS
   // reschedule. A null result means the check didn't finish in time — keep the current label, retry soon.
   const s = await Promise.race<{ state: string; label: string; cls: string } | null>([
