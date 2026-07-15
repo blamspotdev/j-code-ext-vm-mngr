@@ -1,6 +1,6 @@
 id: jcode.ext.vmmanager
 name: VM Manager
-version: 0.3.2
+version: 0.3.3
 type: vm
 publisher: jcode
 description: Create and run x86/x86_64 QEMU virtual machines on this ARM device, incl. a one-click SQL Server VM.

@@ -654,7 +654,7 @@ async function pollProvision(name: string, ram: number, cpus: number, disk: numb
       name, kind: 'sqlserver', ram, cpus, disk, iso: '', seed: 'seed.img', baseImage: 'jammy-amd64.img',
       forwards: [{ guest: 1433, host: 1433 }, { guest: 22, host: 2222 }],
     };
-    await exec('cat > ' + sh(dir + '/vm.json') + " <<'JCODE_EOF'\n" + JSON.stringify(cfg, null, 2) + '\nJCODE_EOF; rm -f ' + sh(dir + '/.prov.json') + ' 2>/dev/null', 10000);
+    await exec('cat > ' + sh(dir + '/vm.json') + " <<'JCODE_EOF'\n" + JSON.stringify(cfg, null, 2) + '\nJCODE_EOF\nrm -f ' + sh(dir + '/.prov.json') + ' 2>/dev/null', 10000);
     toast('Image ready — starting the VM. First boot installs SQL Server (30–60 min); watch the console.');
     await startVm(name);
     await loadVms();
