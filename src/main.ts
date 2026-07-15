@@ -329,6 +329,11 @@ function fwdText(cfg: VmCfg): string {
   return f.length ? f.map((x) => x.guest + '→' + x.host).join(', ') : 'no port forwards';
 }
 
+// The live SQL status element per VM. renderVm points this at the newest card; watchSql keys off it
+// (NOT document.body.contains, which is false at call time because the card isn't appended yet — that
+// bug froze the card on "Checking…") so re-renders supersede old watchers cleanly.
+const sqlWatch: Record<string, HTMLElement> = {};
+
 function renderVm(name: string, cfg: VmCfg, running: boolean): HTMLElement {
   const div = document.createElement('div');
   div.className = 'vm';
@@ -363,7 +368,9 @@ function renderVm(name: string, cfg: VmCfg, running: boolean): HTMLElement {
   });
   if (isSql && running) {
     const statEl = div.querySelector<HTMLElement>('.sqlstat');
-    if (statEl) void watchSql(name, statEl);
+    if (statEl) { sqlWatch[name] = statEl; setTimeout(() => void watchSql(name, statEl), 0); }
+  } else {
+    delete sqlWatch[name];
   }
   return div;
 }
@@ -719,19 +726,17 @@ async function sqlStatus(name: string): Promise<{ state: string; label: string; 
 }
 
 async function watchSql(name: string, el: HTMLElement) {
-  if (!document.body.contains(el)) return;
-  // Do NOT gate on document.hidden: a modal drawer's WebView (landscape) reports hidden even while it is
-  // on screen, which used to defer this poller forever and freeze the card on "Checking…". The
-  // element-in-DOM check above already stops the loop once the card is removed (drawer closed).
+  if (sqlWatch[name] !== el) return; // superseded by a newer render, or the card was removed
   // Never let one slow/stuck exec freeze the poller: race the check against a timeout and ALWAYS
   // reschedule. A null result means the check didn't finish in time — keep the current label, retry soon.
   const s = await Promise.race<{ state: string; label: string; cls: string } | null>([
     sqlStatus(name),
     new Promise<null>((r) => setTimeout(() => r(null), 8000)),
   ]);
+  if (sqlWatch[name] !== el) return; // superseded while the check was in flight
   if (s) { el.textContent = s.label; el.className = 'sqlstat ' + s.cls; }
   const done = !!s && (s.state === 'ready' || s.state === 'error');
-  if (!done && document.body.contains(el)) setTimeout(() => void watchSql(name, el), s ? 10000 : 3000);
+  if (!done) setTimeout(() => void watchSql(name, el), s ? 10000 : 3000);
 }
 
 async function openConsole(name: string) {
