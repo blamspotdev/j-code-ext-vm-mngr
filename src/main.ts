@@ -555,7 +555,7 @@ function openSqlServerDialog() {
       { key: 'name', label: 'VM name', value: 'sqlserver' },
       { key: 'password', label: 'SA password (login: sa)', value: DEFAULT_SA_PASSWORD, type: 'password' },
       { key: 'confirm', label: 'Confirm SA password', value: DEFAULT_SA_PASSWORD, type: 'password' },
-      { key: 'ram', label: 'RAM (MB) — min 4096', value: '4096', type: 'number' },
+      { key: 'ram', label: 'RAM (MB) — min 2048', value: '2048', type: 'number' },
       { key: 'disk', label: 'Disk (GB)', value: '30', type: 'number' },
       { key: 'cpus', label: 'CPUs', value: '2', type: 'number' },
     ],
@@ -570,7 +570,7 @@ function openSqlServerDialog() {
       if (p.indexOf("'") >= 0) return "SA password cannot contain a single quote ( ' ).";
       if (/sa/i.test(p)) return 'SA password cannot contain "sa".';
       if (p !== v.confirm) return 'Passwords do not match.';
-      if ((parseInt(v.ram, 10) || 0) < 4096) return 'RAM must be at least 4096 MB for SQL Server.';
+      if ((parseInt(v.ram, 10) || 0) < 2048) return 'RAM must be at least 2048 MB for SQL Server.';
       return null;
     },
     onConfirm: (v) => void setupSqlServer(v),
@@ -580,10 +580,12 @@ function openSqlServerDialog() {
 async function setupSqlServer(v: Record<string, string>) {
   const name = (v.name || 'sqlserver').trim();
   const password = v.password || '';
-  const ram = Math.max(4096, parseInt(v.ram, 10) || 4096);
+  const ram = Math.max(2048, parseInt(v.ram, 10) || 2048);
   const cpus = Math.min(4, Math.max(1, parseInt(v.cpus, 10) || 2));
   const disk = Math.max(16, parseInt(v.disk, 10) || 30);
-  const memLimit = Math.max(2048, ram - 1536);
+  // Cap SQL Server's memory so the guest OS keeps ~1 GB even at the 2 GB minimum (at 2048 this is
+  // 1024, not the old 2048 floor that would have starved the OS); larger VMs still reserve ram-1536.
+  const memLimit = Math.max(1024, ram - 1536);
   const dir = vmDir(name);
   if (out(await exec('test -e ' + sh(dir) + ' && echo yes || echo no', 8000)) === 'yes') {
     toast('A VM named "' + name + '" already exists.'); return;
