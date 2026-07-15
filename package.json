@@ -1,6 +1,6 @@
 {
   "name": "jcode-ext-vm-manager",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "private": true,
   "description": "VM Manager extension for JCode — built with esbuild + TypeScript.",
   "scripts": {
