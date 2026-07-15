@@ -90,7 +90,7 @@ write_files:
       set -uo pipefail
       SENTINEL=/var/lib/jcode-mssql.done
       LOG=/var/log/jcode-mssql-setup.log
-      exec > >(tee -a "$LOG") 2>&1
+      exec > >(tee -a "$LOG" /dev/ttyS0) 2>&1
       say() { { echo "JCODE_MSSQL: $*" | timeout 2 tee /dev/ttyS0 >/dev/null; } 2>/dev/null || true; echo "JCODE_MSSQL: $*"; }
       [ -f "$SENTINEL" ] && { say already-done; exit 0; }
       SA_PASSWORD='<SA_PASSWORD>'
