@@ -704,10 +704,16 @@ const SQL_PHASES: Record<string, string> = {
 
 async function sqlStatus(name: string): Promise<{ state: string; label: string; cls: string }> {
   const dir = vmDir(name);
-  const port = out(await exec("timeout 2 bash -c 'exec 3<>/dev/tcp/127.0.0.1/1433' 2>/dev/null && echo open || echo closed", 6000));
-  if (port.indexOf('open') >= 0) return { state: 'ready', label: 'SQL Server ready — connect the SQL Client.', cls: 'ok' };
-  const phase = out(await exec(
-    'grep -oE "JCODE_MSSQL: [a-z-]+" ' + sh(dir + '/serial.out') + ' 2>/dev/null | tail -1 | sed "s/JCODE_MSSQL: //"', 6000));
+  // Readiness comes from the guest's own console announcement, NOT a /dev/tcp probe through the emulated
+  // NAT: the guest emits "JCODE_MSSQL: SQL-SERVER-READY ..." once IT has confirmed its 1433 accepts. A
+  // serial.out file read is reliable and can't stall the poller the way the hostfwd probe could. One read
+  // yields the readiness/error tokens AND the latest in-progress phase.
+  const log = out(await exec(
+    'grep -aoE "JCODE_MSSQL: [A-Za-z-]+" ' + sh(dir + '/serial.out') + ' 2>/dev/null', 6000));
+  const tokens = log.split('\n').map((l) => l.replace('JCODE_MSSQL: ', '').trim()).filter(Boolean);
+  if (tokens.indexOf('bound-loopback-only') >= 0) return { state: 'error', label: 'Setup error: ' + SQL_ERRORS['bound-loopback-only'], cls: 'bad' };
+  if (tokens.indexOf('SQL-SERVER-READY') >= 0 || tokens.indexOf('ready') >= 0) return { state: 'ready', label: 'SQL Server ready — connect the SQL Client.', cls: 'ok' };
+  const phase = tokens.length ? tokens[tokens.length - 1] : '';
   if (SQL_ERRORS[phase]) return { state: 'error', label: 'Setup error: ' + SQL_ERRORS[phase], cls: 'bad' };
   return { state: 'work', label: SQL_PHASES[phase] || 'Booting…', cls: '' };
 }
@@ -718,12 +724,15 @@ async function watchSql(name: string, el: HTMLElement) {
     setTimeout(() => void watchSql(name, el), 10000);
     return;
   }
-  const s = await sqlStatus(name);
-  el.textContent = s.label;
-  el.className = 'sqlstat ' + s.cls;
-  if (s.state !== 'ready' && s.state !== 'error' && document.body.contains(el)) {
-    setTimeout(() => void watchSql(name, el), 10000);
-  }
+  // Never let one slow/stuck exec freeze the poller: race the check against a timeout and ALWAYS
+  // reschedule. A null result means the check didn't finish in time — keep the current label, retry soon.
+  const s = await Promise.race<{ state: string; label: string; cls: string } | null>([
+    sqlStatus(name),
+    new Promise<null>((r) => setTimeout(() => r(null), 8000)),
+  ]);
+  if (s) { el.textContent = s.label; el.className = 'sqlstat ' + s.cls; }
+  const done = !!s && (s.state === 'ready' || s.state === 'error');
+  if (!done && document.body.contains(el)) setTimeout(() => void watchSql(name, el), s ? 10000 : 3000);
 }
 
 async function openConsole(name: string) {
