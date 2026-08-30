@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -94,16 +95,18 @@ internal fun VmListPage(host: NativeHost, modifier: Modifier = Modifier) {
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().padding(Space.md),
-        verticalArrangement = Arrangement.spacedBy(Space.sm),
-    ) {
-        // Same shape as Source Control's, which is the panel this one most resembles: a title in
-        // titleMedium and a single refresh that becomes a spinner while it works. Not the manager
-        // header the Toolchains and Extensions panels use — that one is built around a catalog of
-        // installable things, and its "N installed" line and search field say the wrong thing about
-        // a handful of machines you made yourself.
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = modifier.fillMaxSize()) {
+        // Built like Source Control's, which is the panel this one most resembles: the header block
+        // carries its own padding and the rule that closes it spans the drawer, rather than sitting
+        // inside the body's inset. Not the manager header the Toolchains and Extensions panels use —
+        // that one is built around a catalog of installable things, and its "N installed" line and
+        // search field say the wrong thing about a handful of machines you made yourself.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Space.ms, vertical = Space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 text = "Virtual Machines",
                 style = MaterialTheme.typography.titleMedium,
@@ -134,7 +137,15 @@ internal fun VmListPage(host: NativeHost, modifier: Modifier = Modifier) {
                 }
             }
         }
+        HorizontalDivider(
+            thickness = StrokeWidth.hairline,
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
 
+        Column(
+            modifier = Modifier.fillMaxSize().padding(Space.ms),
+            verticalArrangement = Arrangement.spacedBy(Space.sm),
+        ) {
         StatusPill(qemu, qemuChecked)
 
         if (qemuChecked && qemu == null) {
@@ -216,6 +227,7 @@ internal fun VmListPage(host: NativeHost, modifier: Modifier = Modifier) {
                     onDelete = { dialog = VmDialog.ConfirmDelete(row.cfg.name) },
                 )
             }
+        }
         }
     }
 
