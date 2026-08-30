@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -40,7 +41,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.blamspot.jcode.design.CompactFilledButton
 import dev.blamspot.jcode.design.CompactOutlinedButton
+import dev.blamspot.jcode.design.ControlSize
+import dev.blamspot.jcode.design.IconSize
 import dev.blamspot.jcode.design.ManagerNoticeCard
+import dev.blamspot.jcode.design.StrokeWidth
 import dev.blamspot.jcode.design.Space
 import dev.blamspot.jcode.ext.api.NativeHost
 import kotlinx.coroutines.delay
@@ -94,20 +98,40 @@ internal fun VmListPage(host: NativeHost, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize().padding(Space.md),
         verticalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
+        // Same shape as Source Control's, which is the panel this one most resembles: a title in
+        // titleMedium and a single refresh that becomes a spinner while it works. Not the manager
+        // header the Toolchains and Extensions panels use — that one is built around a catalog of
+        // installable things, and its "N installed" line and search field say the wrong thing about
+        // a handful of machines you made yourself.
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Virtual Machines",
-                style = MaterialTheme.typography.titleSmall,
+                text = "Virtual Machines",
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = { reload() }, enabled = !loading) {
-                Icon(
-                    Icons.Rounded.Refresh,
-                    contentDescription = "Refresh",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
+            if (loading) {
+                Box(
+                    modifier = Modifier.size(ControlSize.iconButtonSm),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(IconSize.sm),
+                        strokeWidth = StrokeWidth.thick,
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = { reload() },
+                    modifier = Modifier.size(ControlSize.iconButtonSm),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(IconSize.sm),
+                    )
+                }
             }
         }
 

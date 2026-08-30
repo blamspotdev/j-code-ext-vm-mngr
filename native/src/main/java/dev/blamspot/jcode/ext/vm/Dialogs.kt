@@ -116,7 +116,11 @@ internal fun SqlServerDialog(
     var name by remember { mutableStateOf("sqlserver") }
     var password by remember { mutableStateOf(SqlServer.DEFAULT_PASSWORD) }
     var confirm by remember { mutableStateOf(SqlServer.DEFAULT_PASSWORD) }
-    var ram by remember { mutableStateOf("2048") }
+    // 4096 by default, 2048 the floor. SQL Server starts at 2 GB and spends the whole install
+    // swapping against the guest OS for it; the memory cap this turns into leaves the engine 2560 MB
+    // at the default and only 512 MB at the minimum, which is the difference between an install that
+    // finishes and one that crawls. The floor stays where SQL Server's own requirement is.
+    var ram by remember { mutableStateOf("4096") }
     var disk by remember { mutableStateOf("30") }
     var cpus by remember { mutableStateOf("2") }
     var error by remember { mutableStateOf<String?>(null) }
