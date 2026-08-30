@@ -8,6 +8,29 @@ import org.json.JSONObject
 internal data class Forward(val guest: Int, val host: Int)
 
 /**
+ * The two lines into a running machine.
+ *
+ * [Serial] is the guest talking: its boot log, its getty, its shell. [Monitor] is QEMU talking about
+ * the guest — and it still answers after the guest has stopped, which is exactly when you need to
+ * ask what state the machine is in.
+ *
+ * Both are PTYs read by a service into a file, because that is the only shape that survives here: a
+ * reader forked from an exec would be reaped the moment the exec returned.
+ */
+internal enum class Stream(
+    val label: String,
+    val outFile: String,
+    val ptsFile: String,
+    private val servicePrefix: String,
+) {
+    Serial("Serial", "serial.out", "serial.pts", "vmread"),
+    Monitor("Monitor", "monitor.out", "monitor.pts", "vmmon"),
+    ;
+
+    fun service(vm: String): String = "$servicePrefix:$vm"
+}
+
+/**
  * One VM, as `vm.json` on disk records it.
  *
  * [kind] `"sqlserver"` marks the preset that boots a cloud image with a cloud-init seed attached
@@ -162,9 +185,15 @@ internal object Vm {
         val cfg = readCfg(host, name)
         val fwds = cfg.forwards.joinToString("") { ",hostfwd=tcp::${it.host}-:${it.guest}" }
         // QEMU runs in the FOREGROUND of the service so it survives; its stdout (including the PTY
-        // path it prints) goes to the log, which is where the serial line is found afterwards.
+        // paths it prints) goes to the log, which is where both lines are found afterwards.
+        //
+        // Two PTYs, because they answer different questions. The serial line is the guest talking:
+        // its boot log, its getty, its shell. The monitor is QEMU talking about the guest, and it is
+        // the only way to ask a machine that has stopped responding what state it is in, to power it
+        // down the way pressing the button would, or to pause it. A guest that has wedged says
+        // nothing on its serial line and still answers `info status` on the monitor.
         val tail = " -netdev user,id=n0" + fwds + " -device virtio-net,netdev=n0" +
-            " -display none -serial pty -pidfile " + sh("$dir/qemu.pid") +
+            " -display none -serial pty -monitor pty -pidfile " + sh("$dir/qemu.pid") +
             " >" + sh("$dir/qemu-stdout.log") + " 2>&1"
         val q = if (cfg.isSqlServer || cfg.seed != null) {
             "qemu-system-x86_64 -accel tcg -machine q35 -cpu Westmere" +
@@ -185,25 +214,30 @@ internal object Vm {
         // the OS has reaped QEMU, and an app force-stop leaves an orphan — either way the qcow2 write
         // lock survives and the new QEMU dies with `Failed to get "write" lock`.
         reap(host, "$dir/disk.qcow2", force = true)
-        host.exec(": > ${sh("$dir/serial.out")}; rm -f ${sh("$dir/serial.pts")}", timeoutMs = 8_000)
+        host.exec(
+            ": > ${sh("$dir/serial.out")}; : > ${sh("$dir/monitor.out")}; " +
+                "rm -f ${sh("$dir/serial.pts")} ${sh("$dir/monitor.pts")}",
+            timeoutMs = 8_000,
+        )
         if (!host.serviceStart("vm:$name", q)) return "Start failed: service error"
 
-        var pts = ""
+        var serial = ""
+        var monitor = ""
         repeat(15) {
-            if (pts.isNotBlank()) return@repeat
+            if (serial.isNotBlank() && monitor.isNotBlank()) return@repeat
             delay(400)
-            pts = out(
-                host,
-                "grep -oE \"/dev/pts/[0-9]+\" ${sh("$dir/qemu-stdout.log")} 2>/dev/null | head -1",
-                timeoutMs = 6_000,
-            )
+            val log = out(host, "cat ${sh("$dir/qemu-stdout.log")} 2>/dev/null", timeoutMs = 6_000)
+            if (serial.isBlank()) serial = ptyFor(log, "serial0")
+            if (monitor.isBlank()) monitor = ptyFor(log, "compat_monitor0")
+        }
+        Stream.entries.forEach { stream ->
+            val pts = if (stream == Stream.Serial) serial else monitor
+            if (pts.isBlank()) return@forEach
+            host.exec("printf \"%s\" ${sh(pts)} > ${sh("$dir/${stream.ptsFile}")}", timeoutMs = 6_000)
+            host.serviceStart(stream.service(name), "cat ${sh(pts)} >> ${sh("$dir/${stream.outFile}")}")
         }
         return when {
-            pts.isNotBlank() -> {
-                host.exec("printf \"%s\" ${sh(pts)} > ${sh("$dir/serial.pts")}", timeoutMs = 6_000)
-                host.serviceStart("vmread:$name", "cat ${sh(pts)} >> ${sh("$dir/serial.out")}")
-                "Started $name — open the console."
-            }
+            serial.isNotBlank() -> "Started $name — open the console."
             isRunning(host, name) -> "Started $name (serial not attached — check the log)."
             else -> {
                 val err = out(host, "tail -3 ${sh("$dir/qemu-stdout.log")} 2>/dev/null", 6_000)
@@ -211,6 +245,21 @@ internal object Vm {
             }
         }
     }
+
+    /**
+     * The PTY QEMU gave one of its character devices.
+     *
+     * It announces each as `char device redirected to /dev/pts/3 (label serial0)`, and matching on
+     * the label rather than on the first path in the log is the whole point: with a serial line and
+     * a monitor there are two of them, and which one QEMU opens first is not ours to assume.
+     */
+    private fun ptyFor(log: String, label: String): String =
+        log.lineSequence()
+            .firstOrNull { it.contains("(label $label)") }
+            ?.let { PTY_PATH.find(it)?.value }
+            .orEmpty()
+
+    private val PTY_PATH = Regex("""/dev/pts/\d+""")
 
     /**
      * Signals the QEMU still holding [disk] until nothing answers.
@@ -236,15 +285,34 @@ internal object Vm {
 
     suspend fun stop(host: NativeHost, name: String, force: Boolean) {
         val dir = dirOf(name)
-        host.serviceStop("vmread:$name")
+        Stream.entries.forEach { host.serviceStop(it.service(name)) }
         host.serviceStop("vm:$name")
         reap(host, "$dir/disk.qcow2", force)
-        host.exec("rm -f ${sh("$dir/qemu.pid")} ${sh("$dir/serial.pts")}", timeoutMs = 8_000)
+        val ptsFiles = Stream.entries.joinToString(" ") { sh("$dir/${it.ptsFile}") }
+        host.exec("rm -f ${sh("$dir/qemu.pid")} $ptsFiles", timeoutMs = 8_000)
         delay(300)
     }
 
+    /** The PTY behind one of a machine's lines, as recorded when it started. Blank if not attached. */
+    suspend fun ptsOf(host: NativeHost, name: String, stream: Stream): String =
+        out(host, "cat ${sh("${dirOf(name)}/${stream.ptsFile}")} 2>/dev/null", 8_000)
+
+    /**
+     * Sends one line to a machine's line and lets the reply arrive the usual way.
+     *
+     * Nothing is read back here: the reader service is already streaming that PTY into its file, and
+     * the page is already polling it. Reading the reply here as well would race that service for the
+     * same bytes and each would get half of them.
+     */
+    suspend fun send(host: NativeHost, name: String, stream: Stream, payload: String): Boolean {
+        val pts = ptsOf(host, name, stream)
+        if (pts.isBlank()) return false
+        host.exec("$payload > ${sh(pts)}", timeoutMs = 8_000)
+        return true
+    }
+
     suspend fun delete(host: NativeHost, name: String) {
-        host.serviceStop("vmread:$name")
+        Stream.entries.forEach { host.serviceStop(it.service(name)) }
         host.serviceStop("vm:$name")
         host.exec("rm -rf ${sh(dirOf(name))}", timeoutMs = 20_000)
     }

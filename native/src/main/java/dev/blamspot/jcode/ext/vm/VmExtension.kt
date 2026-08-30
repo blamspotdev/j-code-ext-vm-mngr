@@ -22,15 +22,19 @@ class VmExtension : JCodeNativeExtension {
     @Composable
     override fun Content(host: NativeHost, params: Map<String, String>) {
         val view = params[JCodeNativeExtension.Params.VIEW].orEmpty()
-        if (view.startsWith(CONSOLE_PREFIX)) {
-            ConsolePage(host, view.removePrefix(CONSOLE_PREFIX), Modifier)
-        } else {
-            VmListPage(host, Modifier)
+        when {
+            view.startsWith(CONSOLE_PREFIX) ->
+                VmTerminalPage(host, view.removePrefix(CONSOLE_PREFIX), Stream.Serial, Modifier)
+            view.startsWith(MONITOR_PREFIX) ->
+                VmTerminalPage(host, view.removePrefix(MONITOR_PREFIX), Stream.Monitor, Modifier)
+            else -> VmListPage(host, Modifier)
         }
     }
 
     private companion object {
-        /** What [NativeHost.openView] is asked for; the rest of the id is the machine's name. */
+        /** What [NativeHost.openView] is asked for; the rest of the id is the machine's name. The two
+         *  open the same page on different lines, so each machine keeps one tab either way. */
         const val CONSOLE_PREFIX = "console:"
+        const val MONITOR_PREFIX = "monitor:"
     }
 }

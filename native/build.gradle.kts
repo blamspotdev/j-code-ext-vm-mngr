@@ -60,11 +60,19 @@ dependencies {
     // like Compose: these classes come from JCode at runtime, so this panel is drawn out of the same
     // parts the rest of the IDE is, and a change to the app's density or palette moves it too.
     compileOnly(files("libs/jcode-core-design.jar"))
-    compileOnly(platform("androidx.compose:compose-bom:2025.01.00"))
-    compileOnly("androidx.compose.ui:ui")
-    compileOnly("androidx.compose.foundation:foundation")
-    compileOnly("androidx.compose.material3:material3")
-    compileOnly("androidx.compose.material:material-icons-extended")
+    // Pinned to the versions JCode resolves, not to a BOM. These classes are not bundled — they are
+    // looked up in JCode at runtime — so the signature this compiles against has to be the signature
+    // that is there. Measured the hard way: built against the BOM's Compose 1.7.6, this called the
+    // `FlowRow` overload taking a `FlowRowOverflow`, and JCode ships foundation 1.9.0, where that
+    // overload is gone. It compiled, installed, and died with NoSuchMethodError on first draw.
+    //
+    // Keep in step with the app's `gradle/libs.versions.toml` and what it resolves — a BOM version is
+    // not the same claim as a resolved one.
+    compileOnly("androidx.compose.ui:ui:1.9.0")
+    compileOnly("androidx.compose.foundation:foundation:1.9.0")
+    compileOnly("androidx.compose.runtime:runtime:1.9.0")
+    compileOnly("androidx.compose.material3:material3:1.3.1")
+    compileOnly("androidx.compose.material:material-icons-extended:1.7.6")
     compileOnly("androidx.core:core-ktx:1.15.0")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
 }

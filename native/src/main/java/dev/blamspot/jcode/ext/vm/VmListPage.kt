@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -186,6 +188,7 @@ internal fun VmListPage(host: NativeHost, modifier: Modifier = Modifier) {
                         }
                     },
                     onConsole = { host.openView("console:${row.cfg.name}", "${row.cfg.name} console") },
+                    onMonitor = { host.openView("monitor:${row.cfg.name}", "${row.cfg.name} monitor") },
                     onDelete = { dialog = VmDialog.ConfirmDelete(row.cfg.name) },
                 )
             }
@@ -334,6 +337,7 @@ private fun Dot(color: Color) {
     Box(modifier = Modifier.size(7.dp).background(color, CircleShape))
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VmCard(
     host: NativeHost,
@@ -341,6 +345,7 @@ private fun VmCard(
     onStart: () -> Unit,
     onStop: (Boolean) -> Unit,
     onConsole: () -> Unit,
+    onMonitor: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Surface(
@@ -385,7 +390,12 @@ private fun VmCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (row.cfg.isSqlServer) SqlStatusLine(host, row)
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            // Wrapped, not a Row: with Monitor there are five of these and the drawer is narrow, so
+            // the last one was squeezed into a sliver one letter wide rather than moving down a line.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Space.s),
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
                 if (row.running) {
                     CompactOutlinedButton(text = "Stop", onClick = { onStop(false) })
                     CompactOutlinedButton(text = "Force", onClick = { onStop(true) })
@@ -393,6 +403,9 @@ private fun VmCard(
                     CompactFilledButton(text = "Start", onClick = onStart)
                 }
                 CompactOutlinedButton(text = "Console", onClick = onConsole)
+                // Only while it runs: QEMU's monitor is a line into a live process, and there is
+                // nothing on the other end of it once the machine has stopped.
+                if (row.running) CompactOutlinedButton(text = "Monitor", onClick = onMonitor)
                 CompactOutlinedButton(text = "Delete", onClick = onDelete)
             }
         }
