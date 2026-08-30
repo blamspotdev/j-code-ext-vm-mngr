@@ -13,7 +13,7 @@ requires:
 
 # --- header fields merged from extension.jehm ---
 shortDescription: Create and run x86/x86_64 QEMU VMs — incl. a one-click SQL Server VM — for software with no ARM build.
-minJCodeVersion: 1.0.0
+minJCodeVersion: 1.6.2
 targetJCodeVersion: 1.0.0
 category: Virtualization
 subcategory: QEMU
@@ -23,5 +23,10 @@ images:
   walkthrough: []
 entry:
   manifest: extension.yaml
-  ui: www/index.html
   libs: []
+  # Drawn in JCode's own process rather than a WebView. A bare dex, not an APK: this plugin owns no
+  # resources — every icon it draws is a vector built in code.
+  native:
+    dex: lib/vm.dex
+    class: dev.blamspot.jcode.ext.vm.VmExtension
+    abi: 3

@@ -1,14 +1,9 @@
 {
   "name": "jcode-ext-vm-manager",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "private": true,
-  "description": "VM Manager extension for JCode — built with esbuild + TypeScript.",
+  "description": "VM Manager extension for JCode — a native Compose plugin drawn inside JCode's own process.",
   "scripts": {
-    "build": "node build.mjs",
-    "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "esbuild": "^0.23.1",
-    "typescript": "^5.5.4"
+    "build": "node build.mjs"
   }
 }

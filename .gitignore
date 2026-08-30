@@ -1,3 +1,5 @@
 node_modules/
-www/
+lib/
 *.jext
+native/build/
+native/.gradle/
