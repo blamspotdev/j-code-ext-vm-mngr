@@ -1,16 +1,21 @@
 package dev.blamspot.jcode.ext.vm
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,16 +42,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.blamspot.jcode.design.CompactFilledButton
 import dev.blamspot.jcode.design.CompactOutlinedButton
 import dev.blamspot.jcode.design.ControlSize
 import dev.blamspot.jcode.design.IconSize
+import dev.blamspot.jcode.design.JCodeIcon
 import dev.blamspot.jcode.design.ManagerNoticeCard
+import dev.blamspot.jcode.design.Radius
 import dev.blamspot.jcode.design.StrokeWidth
 import dev.blamspot.jcode.design.Space
+import dev.blamspot.jcode.design.jcIcon
 import dev.blamspot.jcode.ext.api.NativeHost
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -156,26 +166,19 @@ internal fun VmListPage(host: NativeHost, modifier: Modifier = Modifier) {
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-            CompactFilledButton(
-                text = "Create VM",
-                onClick = { dialog = VmDialog.Create },
-                enabled = qemu != null,
+        var menu by remember { mutableStateOf(false) }
+        SplitButton(
+            label = "Create VM",
+            onClick = { dialog = VmDialog.Create },
+            enabled = qemu != null,
+            menuOpen = menu,
+            onMenuOpen = { menu = true },
+            onMenuDismiss = { menu = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Set up SQL Server…", style = MaterialTheme.typography.bodySmall) },
+                onClick = { menu = false; dialog = VmDialog.SqlServer },
             )
-            Box {
-                var menu by remember { mutableStateOf(false) }
-                CompactOutlinedButton(
-                    text = "More",
-                    onClick = { menu = true },
-                    enabled = qemu != null,
-                )
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Set up SQL Server…", style = MaterialTheme.typography.bodySmall) },
-                        onClick = { menu = false; dialog = VmDialog.SqlServer },
-                    )
-                }
-            }
         }
 
         Text(
@@ -525,5 +528,105 @@ private fun ProvisioningCard(name: String, line: String, onCancel: () -> Unit) {
             Text(line, style = MaterialTheme.typography.labelSmall, maxLines = 2)
             CompactOutlinedButton(text = "Cancel", onClick = onCancel)
         }
+    }
+}
+
+/**
+ * Create a VM, and the other ways to make one.
+ *
+ * One control, not two. A filled "Create VM" beside an outlined "More" read as two unrelated
+ * buttons that happened to be adjacent, and the second wore a whole word to say nothing about what
+ * it did. Joined along a hairline, the caret is plainly the menu belonging to the button beside it,
+ * and it takes a quarter of the width doing so.
+ *
+ * The same control Source Control commits with, so the two panels do not each invent a shape for
+ * "this button, and its variants". Written out rather than shared: an extension carries its own UI,
+ * and only JCode's design system crosses between them.
+ */
+@Composable
+private fun SplitButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    menuOpen: Boolean,
+    onMenuOpen: () -> Unit,
+    onMenuDismiss: () -> Unit,
+    menu: @Composable ColumnScope.() -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(ControlSize.compactHeight),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SplitHalf(
+            enabled = enabled,
+            shape = RoundedCornerShape(
+                topStart = Radius.pill,
+                bottomStart = Radius.pill,
+                topEnd = Radius.none,
+                bottomEnd = Radius.none,
+            ),
+            onClick = onClick,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+        }
+        // Hairline rather than a gap: a gap would make them two controls again.
+        Box(
+            modifier = Modifier
+                .width(StrokeWidth.hairline)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)),
+        )
+        Box {
+            SplitHalf(
+                enabled = enabled,
+                shape = RoundedCornerShape(
+                    topStart = Radius.none,
+                    bottomStart = Radius.none,
+                    topEnd = Radius.pill,
+                    bottomEnd = Radius.pill,
+                ),
+                onClick = onMenuOpen,
+                modifier = Modifier.width(SplitCaretWidth).fillMaxHeight(),
+            ) {
+                Icon(
+                    imageVector = jcIcon(JCodeIcon.ChevronDown),
+                    contentDescription = "More ways to create a VM",
+                    modifier = Modifier.size(IconSize.sm),
+                )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss, content = menu)
+        }
+    }
+}
+
+/** Wide enough for a chevron and a thumb, narrow enough to stay the smaller half. */
+private val SplitCaretWidth = 40.dp
+
+/**
+ * One half of a [SplitButton], wearing the filled-tonal colours the app's compact buttons use.
+ *
+ * Written out rather than borrowed from `CompactFilledButton`, which owns its own shape: the whole
+ * point here is that the two halves round only on their outer edges.
+ */
+@Composable
+private fun SplitHalf(
+    enabled: Boolean,
+    shape: Shape,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = shape,
+        color = if (enabled) colors.secondaryContainer else colors.onSurface.copy(alpha = 0.12f),
+        contentColor = if (enabled) colors.onSecondaryContainer else colors.onSurface.copy(alpha = 0.38f),
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(shape)
+            .clickable(enabled = enabled, onClick = onClick),
+    ) {
+        Box(contentAlignment = Alignment.Center) { content() }
     }
 }
