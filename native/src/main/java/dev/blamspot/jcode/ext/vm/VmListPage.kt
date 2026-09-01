@@ -590,7 +590,7 @@ private fun SplitButton(
                 modifier = Modifier.width(SplitCaretWidth).fillMaxHeight(),
             ) {
                 Icon(
-                    imageVector = jcIcon(JCodeIcon.ChevronDown),
+                    painter = jcIcon(JCodeIcon.ChevronDown),
                     contentDescription = "More ways to create a VM",
                     modifier = Modifier.size(IconSize.sm),
                 )

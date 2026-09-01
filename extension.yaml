@@ -13,7 +13,7 @@ requires:
 
 # --- header fields merged from extension.jehm ---
 shortDescription: Create and run x86/x86_64 QEMU VMs — incl. a one-click SQL Server VM — for software with no ARM build.
-minJCodeVersion: 1.6.2
+minJCodeVersion: 1.7.3
 targetJCodeVersion: 1.0.0
 category: Virtualization
 subcategory: QEMU
